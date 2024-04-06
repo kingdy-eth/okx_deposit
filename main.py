@@ -32,7 +32,7 @@ def main():
                 logger.warning(f'{address} | Insufficient balance to send transaction')
                 break
 
-            logger.info(f'{address} | Sending {amount} ETH to {deposit_address}')
+            logger.info(f'{address} | Sending {value_to_send / 1e18} ETH to {deposit_address}')
 
             tx = {
                 'chainId': 59144,
