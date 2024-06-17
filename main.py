@@ -17,7 +17,7 @@ with open('accounts/deposit_addresses.txt', 'r') as deposit_addresses_file:
 
 
 def main():
-    w3 = Web3(Web3.HTTPProvider("https://linea.decubate.com"))
+    w3 = Web3(Web3.HTTPProvider("https://mainnet.era.zksync.io"))
 
     for private_key, deposit_address in zip(private_keys, deposit_addresses):
         address = Web3.to_checksum_address(w3.eth.account.from_key(private_key).address)
@@ -35,7 +35,7 @@ def main():
             logger.info(f'{address} | Sending {value_to_send / 1e18} ETH to {deposit_address}')
 
             tx = {
-                'chainId': 59144,
+                'chainId': 324,
                 'nonce': w3.eth.get_transaction_count(address),
                 'from': address,
                 'to': Web3.to_checksum_address(deposit_address),
@@ -50,7 +50,7 @@ def main():
 
                 if verif_tx(w3, address, tx_hash):
                     logger.success(f'{address} | Transaction was successful | Hash: {tx_hash.hex()}')
-                    logger.info(f'Transaction URL: https://lineascan.build/tx/{tx_hash.hex()}')
+                    logger.info(f'Transaction URL: https://explorer.zksync.io/tx/{tx_hash.hex()}')
                 else:
                     logger.warning(f'{address} | Transaction failed | {tx_hash.hex()}')
             except Exception as error:
