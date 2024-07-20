@@ -1,13 +1,70 @@
 import random
 import time
 
-from web3 import Web3
 from loguru import logger
+from web3 import Web3
 
-increase_gas = 1.1
-eth_threshold = [0.00023, 0.00053]  # скільки eth залишиться на гаманці
-decimal_places = 5  # кількість цифр після 0.
-delay_between_accounts = [30, 60]  # затримка між акаунтами
+'------------------------------------------------ НАСТРОЙКИ -----------------------------------------------------------'
+
+increase_gas = 1.1  # Збільшення газу на 10%
+token_threshold = [0.00023, 0.00053]  # Скільки токена залишиться на гаманці
+decimal_places = 5  # Кількість цифр після 0 в token_threshold
+delay_between_accounts = [30, 60]  # Затримка між акаунтами (в секундах)
+target_chain = 'ARB'  # В якому чейні вивід на окекс
+# ARB, AVAX, BASE, BNB, CELO, CORE, FTM, LINEA, MATIC, MOVR, OP, ZK
+
+'-------------------------------------------------- ЧЕЙНИ -------------------------------------------------------------'
+
+chains = {
+    'ARB': {
+        'rpc': 'https://arbitrum.llamarpc.com',
+        'chainId': 42161
+    },
+    'AVAX': {
+        'rpc': 'https://avalanche.drpc.org',
+        'chainId': 43114
+    },
+    'BASE': {
+        'rpc': 'https://base-pokt.nodies.app',
+        'chainId': 8453
+    },
+    'BNB': {
+        'rpc': 'https://bsc-pokt.nodies.app',
+        'chainId': 56
+    },
+    'CELO': {
+        'rpc': 'https://1rpc.io/celo',
+        'chainId': 42220
+    },
+    'CORE': {
+        'rpc': 'https://core.drpc.org',
+        'chainId': 1116
+    },
+    'FTM': {
+        'rpc': 'https://fantom-pokt.nodies.app',
+        'chainId': 250
+    },
+    'LINEA': {
+        'rpc': 'https://linea.decubate.com',
+        'chainId': 59144
+    },
+    'MATIC': {
+        'rpc': 'https://polygon-pokt.nodies.app',
+        'chainId': 137
+    },
+    'MOVR': {
+        'rpc': 'wss://moonriver-rpc.publicnode.com',
+        'chainId': 1285
+    },
+    'OP': {
+        'rpc': 'wss://optimism-rpc.publicnode.com',
+        'chainId': 10
+    },
+    'ZK': {
+        'rpc': 'https://1rpc.io/zksync2-era',
+        'chainId': 324
+    }
+}
 
 with open('accounts/private_keys.txt', 'r') as private_keys_file:
     private_keys = [line.strip() for line in private_keys_file]
@@ -17,24 +74,25 @@ with open('accounts/deposit_addresses.txt', 'r') as deposit_addresses_file:
 
 
 def main():
-    w3 = Web3(Web3.HTTPProvider("https://mainnet.era.zksync.io"))
+    chain_config = chains[target_chain]
+    w3 = Web3(Web3.HTTPProvider(chain_config['rpc']))
 
     for private_key, deposit_address in zip(private_keys, deposit_addresses):
         address = Web3.to_checksum_address(w3.eth.account.from_key(private_key).address)
 
         balance_wei = w3.eth.get_balance(address)
-        amount = round(random.uniform(eth_threshold[0], eth_threshold[1]), decimal_places)
+        amount = round(random.uniform(token_threshold[0], token_threshold[1]), decimal_places)
         threshold_wei = int(amount * 1e18)
         value_to_send = balance_wei - threshold_wei
 
         if value_to_send <= 0:
-            logger.warning(f'{address} | Insufficient balance to send transaction')
+            logger.warning(f'{address} | Insufficient balance to send transaction on {target_chain}')
             continue
 
-        logger.info(f'{address} | Sending {value_to_send / 1e18} ETH to {deposit_address}')
+        logger.info(f'{address} | Sending {value_to_send / 1e18} {target_chain} to {deposit_address}')
 
         tx = {
-            'chainId': 324,
+            'chainId': chain_config['chainId'],
             'nonce': w3.eth.get_transaction_count(address),
             'from': address,
             'to': Web3.to_checksum_address(deposit_address),
@@ -48,12 +106,12 @@ def main():
             tx_hash = w3.eth.send_raw_transaction(sign.rawTransaction)
 
             if verif_tx(w3, address, tx_hash):
-                logger.success(f'{address} | Transaction was successful | Hash: {tx_hash.hex()}')
-                logger.info(f'Transaction URL: https://explorer.zksync.io/tx/{tx_hash.hex()}')
+                logger.success(f'{address} | {target_chain} transaction was successful | Hash: {tx_hash.hex()}')
+                logger.info(f'Transaction URL: {explorer_url(target_chain, tx_hash.hex())}')
             else:
-                logger.warning(f'{address} | Transaction failed | {tx_hash.hex()}')
+                logger.warning(f'{address} | {target_chain} transaction failed | {tx_hash.hex()}')
         except Exception as error:
-            logger.warning(f'{address} | Transaction failed | Error: {error}')
+            logger.warning(f'{address} | {target_chain} transaction failed | Error: {error}')
 
         delay = random.randint(delay_between_accounts[0], delay_between_accounts[1])
         logger.info(f'Sleeping for {delay} seconds')
@@ -65,19 +123,32 @@ def main():
 def verif_tx(w3, address, tx_hash):
     try:
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=200)
-        if 'status' in receipt and receipt['status'] == 1:
-            return True
-        else:
-            return False
+        return receipt.status == 1
     except Exception as error:
         logger.error(f'{address} | Unexpected error in <verif_tx> function | {error}')
         return False
 
 
 def check_keys_and_addresses():
-    if len(private_keys) != len(deposit_addresses):
-        return False
-    return True
+    return len(private_keys) == len(deposit_addresses)
+
+
+def explorer_url(chain_name, tx_hash):
+    explorers = {
+        'ARB': f'https://arbiscan.io/tx/{tx_hash}',
+        'AVAX': f'https://snowtrace.io/tx/{tx_hash}',
+        'BASE': f'https://basescan.org/tx/{tx_hash}',
+        'BNB': f'https://bscscan/tx/{tx_hash}',
+        'CELO': f'https://explorer.celo.org/mainnet/tx/{tx_hash}',
+        'CORE': f'https://scan.coredao.org/tx/{tx_hash}',
+        'FTM': f'https://ftmscan.com/tx/{tx_hash}',
+        'LINEA': f'https://lineascan.build/tx/{tx_hash}',
+        'MATIC': f'https://polygonscan.com/tx/{tx_hash}',
+        'MOVR': f'https://moonriver.moonscan.io/tx/{tx_hash}',
+        'OP': f'https://optimistic.etherscan.io/tx/{tx_hash}',
+        'ZK': f'https://explorer.zksync.io/tx/{tx_hash}'
+    }
+    return explorers.get(chain_name, '#')
 
 
 if __name__ == "__main__":
