@@ -7,10 +7,10 @@ from web3 import Web3
 '------------------------------------------------ НАСТРОЙКИ -----------------------------------------------------------'
 
 increase_gas = 1.1  # Збільшення газу на 10%
-token_threshold = [0.00023, 0.00053]  # Скільки токена залишиться на гаманці
-decimal_places = 5  # Кількість цифр після 0 в token_threshold
+token_threshold = [2, 5]  # Скільки відсотків токена залишиться на гаманці
 delay_between_accounts = [30, 60]  # Затримка між акаунтами (в секундах)
-target_chain = 'ARB'  # В якому чейні вивід на окекс
+target_chains = ['ARB', 'AVAX']  # В якому чейні вивід на окекс
+delay_between_chains = [30, 60]  # Затримка між чейнами (в секундах)
 # ARB, AVAX, BASE, BNB, CELO, CORE, FTM, LINEA, MATIC, MOVR, OP, ZK
 
 '-------------------------------------------------- ЧЕЙНИ -------------------------------------------------------------'
@@ -74,48 +74,53 @@ with open('accounts/deposit_addresses.txt', 'r') as deposit_addresses_file:
 
 
 def main():
-    chain_config = chains[target_chain]
-    w3 = Web3(Web3.HTTPProvider(chain_config['rpc']))
-
     for private_key, deposit_address in zip(private_keys, deposit_addresses):
-        address = Web3.to_checksum_address(w3.eth.account.from_key(private_key).address)
+        for target_chain in target_chains:
+            chain_config = chains[target_chain]
+            w3 = Web3(Web3.HTTPProvider(chain_config['rpc']))
 
-        balance_wei = w3.eth.get_balance(address)
-        amount = round(random.uniform(token_threshold[0], token_threshold[1]), decimal_places)
-        threshold_wei = int(amount * 1e18)
-        value_to_send = balance_wei - threshold_wei
+            address = Web3.to_checksum_address(w3.eth.account.from_key(private_key).address)
 
-        if value_to_send <= 0:
-            logger.warning(f'{address} | Insufficient balance to send transaction on {target_chain}')
-            continue
+            balance_wei = w3.eth.get_balance(address)
+            threshold_percentage = random.uniform(token_threshold[0], token_threshold[1])
+            threshold_wei = int(balance_wei * (threshold_percentage / 100))
+            value_to_send = balance_wei - threshold_wei
 
-        logger.info(f'{address} | Sending {value_to_send / 1e18} {target_chain} to {deposit_address}')
+            if value_to_send <= 0:
+                logger.warning(f'{address} | Insufficient balance to send transaction on {target_chain}')
+                continue
 
-        tx = {
-            'chainId': chain_config['chainId'],
-            'nonce': w3.eth.get_transaction_count(address),
-            'from': address,
-            'to': Web3.to_checksum_address(deposit_address),
-            'value': value_to_send,
-            'gasPrice': w3.eth.gas_price
-        }
+            logger.info(f'{address} | Sending {value_to_send / 1e18} {target_chain} to {deposit_address}')
 
-        try:
-            tx['gas'] = int(w3.eth.estimate_gas(tx) * increase_gas)
-            sign = w3.eth.account.sign_transaction(tx, private_key)
-            tx_hash = w3.eth.send_raw_transaction(sign.rawTransaction)
+            tx = {
+                'chainId': chain_config['chainId'],
+                'nonce': w3.eth.get_transaction_count(address),
+                'from': address,
+                'to': Web3.to_checksum_address(deposit_address),
+                'value': value_to_send,
+                'gasPrice': w3.eth.gas_price
+            }
 
-            if verif_tx(w3, address, tx_hash):
-                logger.success(f'{address} | {target_chain} transaction was successful | Hash: {tx_hash.hex()}')
-                logger.info(f'Transaction URL: {explorer_url(target_chain, tx_hash.hex())}')
-            else:
-                logger.warning(f'{address} | {target_chain} transaction failed | {tx_hash.hex()}')
-        except Exception as error:
-            logger.warning(f'{address} | {target_chain} transaction failed | Error: {error}')
+            try:
+                tx['gas'] = int(w3.eth.estimate_gas(tx) * increase_gas)
+                sign = w3.eth.account.sign_transaction(tx, private_key)
+                tx_hash = w3.eth.send_raw_transaction(sign.rawTransaction)
 
-        delay = random.randint(delay_between_accounts[0], delay_between_accounts[1])
-        logger.info(f'Sleeping for {delay} seconds')
-        time.sleep(delay)
+                if verif_tx(w3, address, tx_hash):
+                    logger.success(f'{address} | {target_chain} transaction was successful | Hash: {tx_hash.hex()}')
+                    logger.info(f'Transaction URL: {explorer_url(target_chain, tx_hash.hex())}')
+                else:
+                    logger.warning(f'{address} | {target_chain} transaction failed | {tx_hash.hex()}')
+            except Exception as error:
+                logger.warning(f'{address} | {target_chain} transaction failed | Error: {error}')
+
+            chain_delay = random.randint(delay_between_chains[0], delay_between_chains[1])
+            logger.info(f"Sleeping for {chain_delay} seconds before processing the next chain")
+            time.sleep(chain_delay)
+
+        account_delay = random.randint(delay_between_accounts[0], delay_between_accounts[1])
+        logger.info(f'Sleeping for {account_delay} seconds')
+        time.sleep(account_delay)
 
     logger.info("Finished processing all accounts")
 
