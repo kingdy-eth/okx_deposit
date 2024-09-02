@@ -6,12 +6,13 @@ from web3 import Web3
 
 '------------------------------------------------ НАСТРОЙКИ -----------------------------------------------------------'
 
-increase_gas = 1.1  # Збільшення газу на 10%
-token_threshold = [2, 5]  # Скільки відсотків токена залишиться на гаманці
+increase_gas = 1.1                 # Збільшення газу на 10%
+token_threshold = [2, 5]           # Скільки відсотків токена залишиться на гаманці
 delay_between_accounts = [30, 60]  # Затримка між акаунтами (в секундах)
-target_chains = ['ARB', 'AVAX']  # В якому чейні вивід на окекс
-delay_between_chains = [30, 60]  # Затримка між чейнами (в секундах)
+target_chains = ['ARB', 'AVAX']    # В якому чейні вивід на окекс
+delay_between_chains = [30, 60]    # Затримка між чейнами (в секундах)
 # ARB, AVAX, BASE, BNB, CELO, CORE, FTM, LINEA, MATIC, MOVR, OP, ZK
+balance_from_transfer = 0.1        # Мінімальна кількість ETH для переказу
 
 '-------------------------------------------------- ЧЕЙНИ -------------------------------------------------------------'
 
@@ -82,6 +83,12 @@ def main():
             address = Web3.to_checksum_address(w3.eth.account.from_key(private_key).address)
 
             balance_wei = w3.eth.get_balance(address)
+            balance_eth = w3.from_wei(balance_wei, 'ether')
+
+            if balance_eth < balance_from_transfer:
+                logger.warning(f'{address} | Balance {balance_eth} ETH is less than the minimum required {balance_from_transfer} ETH on {target_chain}')
+                continue
+                
             threshold_percentage = random.uniform(token_threshold[0], token_threshold[1])
             threshold_wei = int(balance_wei * (threshold_percentage / 100))
             value_to_send = balance_wei - threshold_wei
